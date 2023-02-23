@@ -150,10 +150,7 @@ class DRM(OffPolicyAlgorithm):
 
         Output: (batch_size)x(n) tensor with the Q variance scaling coefficients.
         """
-        print(q_values)
         q_std_dev = th.std(q_values, dim=1)
-        print("std")
-        print(q_std_dev)
         q_std_dev = th.mul(q_std_dev, self.shaping_temp)
         sigmoid_std_dev = th.sigmoid(q_std_dev)
 
@@ -195,10 +192,7 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                print(single_tensor_current_q_values.size())
-                shaped_rewards = replay_data.rewards + self.get_q_variance_scaling(single_tensor_current_q_values)#*calc_shaping_rewards(replay_data.observations, next_actions)
-                print("scale coeffs")
-                print(self.get_q_variance_scaling(single_tensor_current_q_values))
+                shaped_rewards = replay_data.rewards + self.get_q_variance_scaling(single_tensor_current_q_values)*calc_shaping_rewards(replay_data.observations, next_actions)
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
