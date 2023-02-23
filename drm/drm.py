@@ -154,7 +154,8 @@ class DRM(OffPolicyAlgorithm):
         q_std_dev = th.mul(q_std_dev, self.shaping_temp)
         sigmoid_std_dev = th.sigmoid(q_std_dev)
 
-        return th.mul(th.sub(sigmoid_std_dev,0.5),2)
+        #scale to [0,1] and convert from 100 -> 100x1 before returning
+        return th.mul(th.sub(sigmoid_std_dev,0.5),2).unsqueeze(1)
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         # Switch to train mode (this affects batch norm / dropout)
@@ -172,7 +173,7 @@ class DRM(OffPolicyAlgorithm):
             # Get current Q-values estimates for each critic network
             current_q_values = self.critic(replay_data.observations, replay_data.actions)
             #(batch_size)x(n) tensor of curr. Q values, rather than tuple of n (batchsize)x1 tensors
-            single_tensor_current_q_values = th.cat(current_q_values, dim=1) 
+            # single_tensor_current_q_values = th.cat(current_q_values, dim=1) 
 
             with th.no_grad():
                 # Select action according to policy and add clipped noise
@@ -192,7 +193,8 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                shaped_rewards = replay_data.rewards + self.get_q_variance_scaling(single_tensor_current_q_values)*calc_shaping_rewards(replay_data.observations, next_actions)
+                # shaped_rewards = replay_data.rewards + th.mul(self.get_q_variance_scaling(single_tensor_current_q_values),calc_shaping_rewards(replay_data.observations, next_actions))
+                shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
@@ -229,7 +231,7 @@ class DRM(OffPolicyAlgorithm):
         if len(actor_losses) > 0:
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
-        self.logger.record("train/reward_scale", self.get_q_variance_scaling(next_q_values))
+        # self.logger.record("train/reward_scale", self.get_q_variance_scaling(single_tensor_current_q_values))
 
     def learn(
         self: SelfDRM,
