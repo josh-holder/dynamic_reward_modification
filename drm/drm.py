@@ -230,6 +230,7 @@ class DRM(OffPolicyAlgorithm):
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
         self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
+        self.logger.record("train/q_var", th.mean(th.std(single_tensor_current_q_values, dim=1)).item())
 
     def learn(
         self: SelfDRM,
