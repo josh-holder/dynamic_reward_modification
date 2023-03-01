@@ -123,7 +123,6 @@ class DRM(OffPolicyAlgorithm):
         self.target_noise_clip = target_noise_clip
         self.target_policy_noise = target_policy_noise
         self.shaping_temp = shaping_temp
-        print(f"SHAPING TEMP {self.shaping_temp}")
 
         if _init_setup_model:
             self._setup_model()
