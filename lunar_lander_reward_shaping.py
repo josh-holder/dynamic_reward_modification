@@ -22,7 +22,7 @@ def calc_shaping_rewards(state, action):
 	calculate the action the heuristic would choose, based on https://github.com/openai/gym/blob/master/gym/envs/box2d/lunar_lander.py
 	Then, compare that to the chosen action and assign a shaping reward to the agent
 
-	Input: 
+	Input:
 	 - state: (batch size)x(8) tensor with current observations
 	 - action: (batch_size)x(2) tensor with current action
 
@@ -51,4 +51,11 @@ def calc_shaping_rewards(state, action):
 	# absolute value difference between the two actions.
 	# We might look into more sophisticated methods if time allows
 	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1)
+
+	# Testing:
+	# Approach 1:
+	# Square rewards and multiply by -1
+	rewards = th.mul(rewards, rewards)
+	rewards = th.multiply(rewards, -1.0)
+
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
