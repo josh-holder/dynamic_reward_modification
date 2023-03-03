@@ -22,7 +22,7 @@ def calc_shaping_rewards(state, action):
 	calculate the action the heuristic would choose, based on https://github.com/openai/gym/blob/master/gym/envs/box2d/lunar_lander.py
 	Then, compare that to the chosen action and assign a shaping reward to the agent
 
-	Input: 
+	Input:
 	 - state: (batch size)x(8) tensor with current observations
 	 - action: (batch_size)x(2) tensor with current action
 
@@ -42,6 +42,8 @@ def calc_shaping_rewards(state, action):
 	landing_leg_down = (state[:,6]+state[:,7]).bool()
 	angle_todo = th.where(landing_leg_down,0,angle_todo)
 	hover_todo = th.where(landing_leg_down,th.mul(state[:,3],-0.5), hover_todo)
+
+	#test
 
 	heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
 	heuristic_action = th.clip(heuristic_action, -1, +1)
