@@ -43,8 +43,6 @@ def calc_shaping_rewards(state, action):
 	angle_todo = th.where(landing_leg_down,0,angle_todo)
 	hover_todo = th.where(landing_leg_down,th.mul(state[:,3],-0.5), hover_todo)
 
-	#test
-
 	heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
 	heuristic_action = th.clip(heuristic_action, -1, +1)
 
@@ -53,4 +51,11 @@ def calc_shaping_rewards(state, action):
 	# absolute value difference between the two actions.
 	# We might look into more sophisticated methods if time allows
 	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1)
+
+	# Testing:
+	# Approach 1:
+	# Square rewards and multiply by -1
+	rewards = th.mul(rewards, rewards)
+	rewards = th.multiply(rewards, -1.0)
+
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
