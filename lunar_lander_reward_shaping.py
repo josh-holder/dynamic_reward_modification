@@ -55,7 +55,12 @@ def calc_shaping_rewards(state, action):
 	# Testing:
 	# Approach 1:
 	# Square rewards and multiply by -1
-	rewards = th.mul(rewards, rewards)
+	# rewards = th.mul(rewards, rewards)
+	# rewards = th.multiply(rewards, -1.0)
+
+	# Approach 2:
+	# Square root abs val rewards and multiply by -1
+	rewards = th.sqrt(th.abs(rewards))
 	rewards = th.multiply(rewards, -1.0)
 
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
