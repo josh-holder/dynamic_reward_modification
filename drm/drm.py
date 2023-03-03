@@ -147,7 +147,7 @@ class DRM(OffPolicyAlgorithm):
         """
         Input: (batch_size)x(n) tensor with all q values.
 
-        Output: (batch_size)x(n) tensor with the Q variance scaling coefficients.
+        Output: (batch_size)x(1) tensor with the Q variance scaling coefficients.
         """
         q_std_dev = th.std(q_values, dim=1)
         q_std_dev = th.mul(q_std_dev, self.shaping_temp)
@@ -172,7 +172,7 @@ class DRM(OffPolicyAlgorithm):
             # Get current Q-values estimates for each critic network
             current_q_values = self.critic(replay_data.observations, replay_data.actions)
             #(batch_size)x(n) tensor of curr. Q values, rather than tuple of n (batchsize)x1 tensors
-            single_tensor_current_q_values = th.cat(current_q_values, dim=1) 
+            single_tensor_current_q_values = th.cat(current_q_values, dim=1)
 
             with th.no_grad():
                 # Select action according to policy and add clipped noise
@@ -182,7 +182,7 @@ class DRM(OffPolicyAlgorithm):
 
                 m = 2
                 critic_indices_to_use = np.random.choice(self.critic.n_critics, m, replace=False)
-                
+
                 # Compute the next Q-values: min over a random selection of m of the critics.
                 next_q_values = []
                 for critic_index in critic_indices_to_use:
@@ -231,6 +231,7 @@ class DRM(OffPolicyAlgorithm):
         self.logger.record("train/critic_loss", np.mean(critic_losses))
         self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/q_var", th.mean(th.std(single_tensor_current_q_values, dim=1)).item())
+        self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
 
     def learn(
         self: SelfDRM,
