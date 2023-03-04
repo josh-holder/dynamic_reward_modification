@@ -52,4 +52,19 @@ def calc_shaping_rewards(state, action):
 	# We might look into more sophisticated methods if time allows
 	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1)
 
+	# Testing:
+	# Approach 1:
+	# Square rewards and multiply by -1
+	# rewards = th.mul(rewards, rewards)
+	# rewards = th.multiply(rewards, -1.0)
+
+	# Approach 2:
+	# Square root abs val rewards and multiply by -1
+	# rewards = th.sqrt(th.abs(rewards))
+	# rewards = th.multiply(rewards, -1.0)
+
+	# Approach 3:
+	# Set "rewards" to positive, probably won't work but let's see what happens
+	rewards = th.multiply(rewards, -1.0)
+
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
