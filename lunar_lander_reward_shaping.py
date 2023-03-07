@@ -14,7 +14,6 @@
 # Currently this value will be non-positive, with 0 being
 # that the two actions are exactly the same, and gets more
 # negative the more different they are.
-import numpy as np
 import torch as th
 
 def calc_shaping_rewards(state, action):
