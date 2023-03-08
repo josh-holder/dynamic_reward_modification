@@ -16,7 +16,7 @@ import rl_zoo3.import_envs  # noqa: F401 pytype: disable=import-error
 from flexible_exp_manager import FlexibleExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from drm.drm import DRM
-from drm.policies import DRMPolicy
+from drm.drm_policies import DRMPolicy
 
 
 def train() -> None:
@@ -149,6 +149,7 @@ def train() -> None:
     )
     parser.add_argument("--wandb-project-name", type=str, default="Dynamic Reward Modification", help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None, help="the entity (team) of wandb's project")
+    parser.add_argument("--wandb-run_name",type=str, default=None, help="the run name to be used in wandb")
     parser.add_argument(
         "-P",
         "--progress",
@@ -212,7 +213,8 @@ def train() -> None:
                 "if you want to use Weights & Biases to track experiment, please install W&B via `pip install wandb`"
             )
 
-        run_name = f"{args.env}__{args.algo}__{args.seed}__{int(time.time())}"
+        if args.wandb_run_name != None: run_name = args.wandb_run_name
+        else: run_name = f"{args.env}__{args.algo}__{args.seed}__{int(time.time())}"
         tags = args.wandb_tags + [f"v{sb3.__version__}"]
         run = wandb.init(
             name=run_name,
