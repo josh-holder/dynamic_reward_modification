@@ -141,6 +141,8 @@ class DRM(OffPolicyAlgorithm):
         self.actor_target = self.policy.actor_target
         self.critic = self.policy.critic
         self.critic_target = self.policy.critic_target
+        self.rnd_target = self.policy.rnd_target
+        self.rnd_learner = self.policy.rnd_learner
 
     def get_q_variance_scaling(self, q_values):
         """
@@ -160,9 +162,9 @@ class DRM(OffPolicyAlgorithm):
         self.policy.set_training_mode(True)
 
         # Update learning rate according to lr schedule
-        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer])
+        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer, self.rnd_learner.optimizer])
 
-        actor_losses, critic_losses = [], []
+        actor_losses, critic_losses, rnd_losses = [], [], []
         for _ in range(gradient_steps):
             self._n_updates += 1
             # Sample replay buffer
@@ -192,8 +194,8 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
                 q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
-                # shaped_rewards = replay_data.rewards
+                # shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
+                shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
@@ -206,6 +208,19 @@ class DRM(OffPolicyAlgorithm):
             self.critic.optimizer.zero_grad()
             critic_loss.backward()
             self.critic.optimizer.step()
+
+            #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
+            #This feels... not ideal, and indiciative of a deeper problem...
+            #compute RND loss
+            with th.no_grad():
+                target_rnd_vals = self.rnd_target(replay_data.observations)
+            rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
+            rnd_losses.append(rnd_loss.item())
+
+            #optimize the RND learner
+            self.rnd_learner.optimizer.zero_grad()
+            rnd_loss.backward()
+            self.rnd_learner.optimizer.step()
 
             # Delayed policy updates
             if self._n_updates % self.policy_delay == 0:
@@ -230,6 +245,7 @@ class DRM(OffPolicyAlgorithm):
         self.logger.record("train/critic_loss", np.mean(critic_losses))
         self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
+        self.logger.record("train/rnd_loss", np.mean(rnd_losses))
 
     def learn(
         self: SelfDRM,

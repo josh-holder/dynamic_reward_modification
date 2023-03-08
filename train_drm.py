@@ -149,7 +149,7 @@ def train() -> None:
     )
     parser.add_argument("--wandb-project-name", type=str, default="Dynamic Reward Modification", help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None, help="the entity (team) of wandb's project")
-    parser.add_argument("--wandb-run_name",type=str, default=None, help="the run name to be used in wandb")
+    parser.add_argument("--wandb-run-name",type=str, default=None, help="the run name to be used in wandb")
     parser.add_argument(
         "-P",
         "--progress",
