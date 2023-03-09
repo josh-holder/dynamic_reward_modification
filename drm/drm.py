@@ -124,6 +124,8 @@ class DRM(OffPolicyAlgorithm):
         self.target_policy_noise = target_policy_noise
         self.shaping_temp = shaping_temp
 
+        self.max_avg_rnd_loss = 0
+
         if _init_setup_model:
             self._setup_model()
 
@@ -176,6 +178,15 @@ class DRM(OffPolicyAlgorithm):
             single_tensor_current_q_values = th.cat(current_q_values, dim=1)
 
             with th.no_grad():
+                target_rnd_vals = self.rnd_target(replay_data.observations)
+                rnd_differences = th.abs(target_rnd_vals - self.rnd_learner(replay_data.observations))
+                avg_rnd_differences = rnd_differences.mean().item()
+
+                if avg_rnd_differences > self.max_avg_rnd_loss:
+                    self.max_avg_rnd_loss = avg_rnd_differences
+
+                normalized_rnd_differences = rnd_differences/self.max_avg_rnd_loss
+
                 # Select action according to policy and add clipped noise
                 noise = replay_data.actions.clone().data.normal_(0, self.target_policy_noise)
                 noise = noise.clamp(-self.target_noise_clip, self.target_noise_clip)
@@ -193,9 +204,9 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                # shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
-                shaped_rewards = replay_data.rewards
+                # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
+                shaped_rewards = replay_data.rewards + th.mul(normalized_rnd_differences,calc_shaping_rewards(replay_data.observations, next_actions))
+                # shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
@@ -211,9 +222,7 @@ class DRM(OffPolicyAlgorithm):
 
             #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
             #This feels... not ideal, and indiciative of a deeper problem...
-            #compute RND loss
-            with th.no_grad():
-                target_rnd_vals = self.rnd_target(replay_data.observations)
+            #Compute RND loss
             rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
             rnd_losses.append(rnd_loss.item())
 
