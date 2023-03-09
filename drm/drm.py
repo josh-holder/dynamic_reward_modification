@@ -193,7 +193,7 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
                 q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
+                shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
