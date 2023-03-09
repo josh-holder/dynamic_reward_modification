@@ -123,6 +123,7 @@ class DRM(OffPolicyAlgorithm):
         self.target_noise_clip = target_noise_clip
         self.target_policy_noise = target_policy_noise
         self.shaping_temp = shaping_temp
+        self.max_avg_q_std = 0
 
         if _init_setup_model:
             self._setup_model()
@@ -193,11 +194,20 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                shaped_rewards = th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
-                # shaped_rewards = replay_data.rewards
+                # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
+                q_std_devs = th.std(single_tensor_current_q_values, dim=1)
+                avg_q_std_dev = q_std_devs.mean()
+                if avg_q_std_dev > self.max_avg_q_std:
+                    self.max_avg_q_std = avg_q_std_dev
+                # print(f"Max avg {self.max_avg_q_std}")
 
+                normalized_q_std_devs = th.div(q_std_devs, self.max_avg_q_std).unsqueeze(1)
+
+                shaped_rewards = th.mul(normalized_q_std_devs,calc_shaping_rewards(replay_data.observations, replay_data.actions))
+                # print(f"Normalized qstd avg {normalized_q_std_devs.mean().item()}")
+                
                 target_q_values = replay_data.rewards + shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+                
 
             # Compute critic loss
             #F is torch functional
@@ -212,15 +222,15 @@ class DRM(OffPolicyAlgorithm):
             #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
             #This feels... not ideal, and indiciative of a deeper problem...
             #compute RND loss
-            with th.no_grad():
-                target_rnd_vals = self.rnd_target(replay_data.observations)
-            rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
-            rnd_losses.append(rnd_loss.item())
+            # with th.no_grad():
+            #     target_rnd_vals = self.rnd_target(replay_data.observations)
+            # rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
+            # rnd_losses.append(rnd_loss.item())
 
-            #optimize the RND learner
-            self.rnd_learner.optimizer.zero_grad()
-            rnd_loss.backward()
-            self.rnd_learner.optimizer.step()
+            # #optimize the RND learner
+            # self.rnd_learner.optimizer.zero_grad()
+            # rnd_loss.backward()
+            # self.rnd_learner.optimizer.step()
 
             # Delayed policy updates
             if self._n_updates % self.policy_delay == 0:
@@ -243,9 +253,11 @@ class DRM(OffPolicyAlgorithm):
         if len(actor_losses) > 0:
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
-        self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
+        # self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
-        self.logger.record("train/rnd_loss", np.mean(rnd_losses))
+        # self.logger.record("train/rnd_loss", np.mean(rnd_losses))
+        self.logger.record("train/max_avg_qstd", self.max_avg_q_std)
+        self.logger.record("train/avg_norm_qstd", normalized_q_std_devs.mean().item())
         # self.logger.record("train/shaped_reward_mag", th.mean(shaped_rewards).item())
         # self.logger.record("train/env_reward_mag", th.mean(replay_data.rewards).item())
 
