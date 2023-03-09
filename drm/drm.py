@@ -201,7 +201,7 @@ class DRM(OffPolicyAlgorithm):
                     self.max_avg_q_std = avg_q_std_dev
                 # print(f"Max avg {self.max_avg_q_std}")
 
-                normalized_q_std_devs = th.div(q_std_devs, self.max_avg_q_std).unsqueeze(1)
+                normalized_q_std_devs = th.clip(th.div(q_std_devs, self.max_avg_q_std/2).unsqueeze(1), 0, 1)
 
                 shaped_rewards = th.mul(normalized_q_std_devs,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 # print(f"Normalized qstd avg {normalized_q_std_devs.mean().item()}"
