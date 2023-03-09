@@ -13,6 +13,14 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
 from drm.drm_policies import DRMPolicy, CnnPolicy, MlpPolicy, MultiInputPolicy
 
+from stable_baselines3.common.buffers import ReplayBuffer
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.noise import ActionNoise, VectorizedActionNoise
+from stable_baselines3.common.policies import BasePolicy
+from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
+from stable_baselines3.common.utils import should_collect_more_steps
+from stable_baselines3.common.vec_env import VecEnv
+
 from lunar_lander_reward_shaping import calc_shaping_rewards
 
 SelfDRM = TypeVar("SelfDRM", bound="DRM")
@@ -127,6 +135,115 @@ class DRM(OffPolicyAlgorithm):
         if _init_setup_model:
             self._setup_model()
 
+    def collect_rollouts(
+        self,
+        env: VecEnv,
+        callback: BaseCallback,
+        train_freq: TrainFreq,
+        replay_buffer: ReplayBuffer,
+        action_noise: Optional[ActionNoise] = None,
+        learning_starts: int = 0,
+        log_interval: Optional[int] = None,
+    ) -> RolloutReturn:
+        """
+        Collect experiences and store them into a ``ReplayBuffer``.
+        :param env: The training environment
+        :param callback: Callback that will be called at each step
+            (and at the beginning and end of the rollout)
+        :param train_freq: How much experience to collect
+            by doing rollouts of current policy.
+            Either ``TrainFreq(<n>, TrainFrequencyUnit.STEP)``
+            or ``TrainFreq(<n>, TrainFrequencyUnit.EPISODE)``
+            with ``<n>`` being an integer greater than 0.
+        :param action_noise: Action noise that will be used for exploration
+            Required for deterministic policy (e.g. TD3). This can also be used
+            in addition to the stochastic policy for SAC.
+        :param learning_starts: Number of steps before learning for the warm-up phase.
+        :param replay_buffer:
+        :param log_interval: Log data every ``log_interval`` episodes
+        :return:
+        """
+        # Switch to eval mode (this affects batch norm / dropout)
+        self.policy.set_training_mode(False)
+
+        num_collected_steps, num_collected_episodes = 0, 0
+
+        assert isinstance(env, VecEnv), "You must pass a VecEnv"
+        assert train_freq.frequency > 0, "Should at least collect one step or episode."
+
+        if env.num_envs > 1:
+            assert train_freq.unit == TrainFrequencyUnit.STEP, "You must use only one env when doing episodic training."
+
+        # Vectorize action noise if needed
+        if action_noise is not None and env.num_envs > 1 and not isinstance(action_noise, VectorizedActionNoise):
+            action_noise = VectorizedActionNoise(action_noise, env.num_envs)
+
+        if self.use_sde:
+            self.actor.reset_noise(env.num_envs)
+
+        callback.on_rollout_start()
+        continue_training = True
+
+        i = 0
+        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
+            if self.use_sde and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
+                # Sample a new noise matrix
+                self.actor.reset_noise(env.num_envs)
+
+            # Select action randomly or according to policy
+            # USE self._last_obs
+            actions, buffer_actions = self._sample_action(learning_starts, action_noise, env.num_envs)
+
+            self.logger.record("time/episodes", self._episode_num, exclude="tensorboard")
+
+            # Rescale and perform action
+            new_obs, rewards, dones, infos = env.step(actions)
+
+            lander_velocity = (new_obs[2]**2 + new_obs[3]**2)**0.5
+
+            if i % 10 == 0:
+                self.logger.record("rollout/velocity", lander_velocity)
+
+            self.num_timesteps += env.num_envs
+            num_collected_steps += 1
+
+            # Give access to local variables
+            callback.update_locals(locals())
+            # Only stop training if return value is False, not when it is None.
+            if callback.on_step() is False:
+                return RolloutReturn(num_collected_steps * env.num_envs, num_collected_episodes, continue_training=False)
+
+            # Retrieve reward and episode length if using Monitor wrapper
+            self._update_info_buffer(infos, dones)
+
+            # Store data in replay buffer (normalized action and unnormalized observation)
+            self._store_transition(replay_buffer, buffer_actions, new_obs, rewards, dones, infos)
+
+            self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
+
+            # For DQN, check if the target network should be updated
+            # and update the exploration schedule
+            # For SAC/TD3, the update is dones as the same time as the gradient update
+            # see https://github.com/hill-a/stable-baselines/issues/900
+            self._on_step()
+
+            for idx, done in enumerate(dones):
+                if done:
+                    # Update stats
+                    num_collected_episodes += 1
+                    self._episode_num += 1
+
+                    if action_noise is not None:
+                        kwargs = dict(indices=[idx]) if env.num_envs > 1 else {}
+                        action_noise.reset(**kwargs)
+
+                    # Log training infos
+                    if log_interval is not None and self._episode_num % log_interval == 0:
+                        self._dump_logs()
+        callback.on_rollout_end()
+
+        return RolloutReturn(num_collected_steps * env.num_envs, num_collected_episodes, continue_training)
+
     def _setup_model(self) -> None:
         super()._setup_model()
         self._create_aliases()
@@ -141,8 +258,6 @@ class DRM(OffPolicyAlgorithm):
         self.actor_target = self.policy.actor_target
         self.critic = self.policy.critic
         self.critic_target = self.policy.critic_target
-        self.rnd_target = self.policy.rnd_target
-        self.rnd_learner = self.policy.rnd_learner
 
     def get_q_variance_scaling(self, q_values):
         """
@@ -189,12 +304,12 @@ class DRM(OffPolicyAlgorithm):
                 for critic_index in critic_indices_to_use:
                     features = self.critic_target.extract_features(replay_data.next_observations, self.critic_target.features_extractor)
                     next_q_values.append(self.critic_target.q_networks[critic_index](th.cat([features, next_actions], dim=1)))
-                    
+
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                # shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
+                # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
+                # shaped_rewards = th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
@@ -208,19 +323,6 @@ class DRM(OffPolicyAlgorithm):
             self.critic.optimizer.zero_grad()
             critic_loss.backward()
             self.critic.optimizer.step()
-
-            #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
-            #This feels... not ideal, and indiciative of a deeper problem...
-            #compute RND loss
-            with th.no_grad():
-                target_rnd_vals = self.rnd_target(replay_data.observations)
-            rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
-            rnd_losses.append(rnd_loss.item())
-
-            #optimize the RND learner
-            self.rnd_learner.optimizer.zero_grad()
-            rnd_loss.backward()
-            self.rnd_learner.optimizer.step()
 
             # Delayed policy updates
             if self._n_updates % self.policy_delay == 0:
@@ -245,7 +347,6 @@ class DRM(OffPolicyAlgorithm):
         self.logger.record("train/critic_loss", np.mean(critic_losses))
         self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
-        self.logger.record("train/rnd_loss", np.mean(rnd_losses))
 
     def learn(
         self: SelfDRM,

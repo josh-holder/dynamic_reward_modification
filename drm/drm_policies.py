@@ -196,11 +196,6 @@ class DRMPolicy(BasePolicy):
         self.actor_target.set_training_mode(False)
         self.critic_target.set_training_mode(False)
 
-        #Create RND networks
-        self.rnd_target = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner.optimizer = self.optimizer_class(self.critic.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         data = super()._get_constructor_parameters()
 
@@ -226,16 +221,6 @@ class DRMPolicy(BasePolicy):
     def make_critic(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> ContinuousCritic:
         critic_kwargs = self._update_features_extractor(self.critic_kwargs, features_extractor)
         return ContinuousCritic(**critic_kwargs).to(self.device)
-
-    def make_rnd_network(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> Actor:
-        #copy the critic kwargs
-        rnd_kwargs = self._update_features_extractor(self.critic_kwargs, features_extractor)
-
-        #Remove unnecessary keys from critic_kwargs before passing to RND:
-        rnd_kwargs.pop('action_space')
-        rnd_kwargs.pop('n_critics')
-        rnd_kwargs.pop('share_features_extractor')
-        return ContinuousRNDNetwork(**rnd_kwargs).to(self.device)
 
     def forward(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         return self._predict(observation, deterministic=deterministic)
@@ -363,41 +348,3 @@ class MultiInputPolicy(DRMPolicy):
             n_critics,
             share_features_extractor,
         )
-
-class ContinuousRNDNetwork(BaseModel):
-    """
-    RND Networks for DRM.
-
-    :param observation_space: Obervation space
-    :param net_arch: Network architecture
-    :param features_extractor: Network to extract features
-        (a CNN when using images, a nn.Flatten() layer otherwise)
-    :param features_dim: Number of features
-    :param activation_fn: Activation function
-    :param normalize_images: Whether to normalize images or not,
-         dividing by 255.0 (True by default)
-    """
-
-    def __init__(
-        self,
-        observation_space: spaces.Space,
-        net_arch: List[int],
-        features_extractor: nn.Module,
-        features_dim: int,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
-    ):
-        super().__init__(
-            observation_space,
-            None, #no action space
-            features_extractor=features_extractor,
-            normalize_images=normalize_images,
-        )
-
-        self.model = create_mlp(features_dim, 1, net_arch, activation_fn)
-        self.model = nn.Sequential(*self.model)
-        self.add_module("model", self.model)
-
-    def forward(self, obs: th.Tensor) -> Tuple[th.Tensor, ...]:
-        features = self.extract_features(obs, self.features_extractor)
-        return self.model(features)
