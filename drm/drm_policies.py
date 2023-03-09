@@ -197,9 +197,9 @@ class DRMPolicy(BasePolicy):
         self.critic_target.set_training_mode(False)
 
         #Create RND networks
-        self.rnd_target = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner.optimizer = self.optimizer_class(self.critic.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        # self.rnd_target = self.make_rnd_network(features_extractor=None)
+        # self.rnd_learner = self.make_rnd_network(features_extractor=None)
+        # self.rnd_learner.optimizer = self.optimizer_class(self.critic.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         data = super()._get_constructor_parameters()
