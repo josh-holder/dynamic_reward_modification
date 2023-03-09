@@ -189,15 +189,15 @@ class DRM(OffPolicyAlgorithm):
                 for critic_index in critic_indices_to_use:
                     features = self.critic_target.extract_features(replay_data.next_observations, self.critic_target.features_extractor)
                     next_q_values.append(self.critic_target.q_networks[critic_index](th.cat([features, next_actions], dim=1)))
-                    
+
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
                 q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                # shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, next_actions))
-                shaped_rewards = replay_data.rewards
+                shaped_rewards = th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
+                # shaped_rewards = replay_data.rewards
 
-                target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+                target_q_values = replay_data.rewards + shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
             # Compute critic loss
             #F is torch functional
@@ -246,6 +246,8 @@ class DRM(OffPolicyAlgorithm):
         self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
         self.logger.record("train/rnd_loss", np.mean(rnd_losses))
+        # self.logger.record("train/shaped_reward_mag", th.mean(shaped_rewards).item())
+        # self.logger.record("train/env_reward_mag", th.mean(replay_data.rewards).item())
 
     def learn(
         self: SelfDRM,
