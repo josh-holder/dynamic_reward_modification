@@ -196,7 +196,7 @@ class DRM(OffPolicyAlgorithm):
 
                 # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
                 q_std_devs = th.std(single_tensor_current_q_values, dim=1)
-                avg_q_std_dev = q_std_devs.mean()
+                avg_q_std_dev = q_std_devs.mean().item()
                 if avg_q_std_dev > self.max_avg_q_std:
                     self.max_avg_q_std = avg_q_std_dev
                 # print(f"Max avg {self.max_avg_q_std}")
@@ -204,8 +204,8 @@ class DRM(OffPolicyAlgorithm):
                 normalized_q_std_devs = th.div(q_std_devs, self.max_avg_q_std).unsqueeze(1)
 
                 shaped_rewards = th.mul(normalized_q_std_devs,calc_shaping_rewards(replay_data.observations, replay_data.actions))
-                # print(f"Normalized qstd avg {normalized_q_std_devs.mean().item()}")
-                
+                # print(f"Normalized qstd avg {normalized_q_std_devs.mean().item()}"
+
                 target_q_values = replay_data.rewards + shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
                 
 
