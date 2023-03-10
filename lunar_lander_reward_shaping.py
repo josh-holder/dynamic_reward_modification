@@ -47,7 +47,7 @@ def calc_shaping_rewards(state, action):
 
 	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
 	# velocity_penalty = th.clip((th.abs(state[:,3])-0.2),0,0.15)
-	th.where(state[:,3]<0.1 and state[:,3]>-0.1,0.1)
+	th.where(th.le(state[:,3],0.1) and th.ge(state[:,3],-0.1),0.1)
 	
 	# print(velocity_penalty)
 
