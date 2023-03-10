@@ -198,9 +198,7 @@ class DRM(OffPolicyAlgorithm):
 
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
-
-            lander_velocity = (new_obs[2]**2 + new_obs[3]**2)**0.5
-
+            lander_velocity = (new_obs[0,2]**2 + new_obs[0,3]**2)**0.5
             if i % 10 == 0:
                 self.logger.record("rollout/velocity", lander_velocity)
 
@@ -277,7 +275,7 @@ class DRM(OffPolicyAlgorithm):
         self.policy.set_training_mode(True)
 
         # Update learning rate according to lr schedule
-        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer, self.rnd_learner.optimizer])
+        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer])
 
         actor_losses, critic_losses, rnd_losses = [], [], []
         for _ in range(gradient_steps):
@@ -308,8 +306,8 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values = th.cat(next_q_values, dim=1) #change tuple to single tensor
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
-                # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
-                # shaped_rewards = th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
+                q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
+                shaped_rewards = th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 shaped_rewards = replay_data.rewards
 
                 target_q_values = shaped_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
@@ -345,7 +343,7 @@ class DRM(OffPolicyAlgorithm):
         if len(actor_losses) > 0:
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
-        self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
+        # self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
 
     def learn(
