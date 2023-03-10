@@ -47,7 +47,7 @@ def calc_shaping_rewards(state, action):
 
 	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
 	# velocity_penalty = th.clip((th.abs(state[:,3])-0.2),0,0.15)
-	hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0.1)
+	hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0,0.1)
 	
 	# print(velocity_penalty)
 
