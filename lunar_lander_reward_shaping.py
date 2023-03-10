@@ -46,8 +46,8 @@ def calc_shaping_rewards(state, action):
 	heuristic_action = th.clip(heuristic_action, -1, +1)
 
 	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
-	velocity_penalty = th.clip((th.abs(state[:,3])-0.2),0,0.15)
-	# th.where(state[:,3])
+	# velocity_penalty = th.clip((th.abs(state[:,3])-0.2),0,0.15)
+	th.where(state[:,3]<0.1 and state[:,3]>-0.1,0.1)
 	
 	# print(velocity_penalty)
 
