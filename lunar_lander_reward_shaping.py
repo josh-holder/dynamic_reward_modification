@@ -45,8 +45,8 @@ def calc_shaping_rewards(state, action):
 	heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
 	heuristic_action = th.clip(heuristic_action, -1, +1)
 
-	velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
-	velocity_penalty = th.clip((velocity-0.5),0,0.25)
+	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
+	velocity_penalty = th.clip((state[:,4]-0.3),0,0.25)
 
 	# calculate the difference between the algorithm action and the heuristic action
 	# currently this is just a naive method, where the reward is the total negative
