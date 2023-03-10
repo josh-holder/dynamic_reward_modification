@@ -30,9 +30,9 @@ def calc_shaping_rewards(state, action):
 	"""
 	#Calculate angle target, clipped between +- 0.4
 	angle_targ = th.mul(state[:,0],0.5) + state[:,2]
-	angle_targ = th.clip(angle_targ, -0.4, 0.4)
+	angle_targ = th.clip(angle_targ, -0.3, 0.3)
 
-	hover_targ = th.mul(th.abs(state[:,0]), 0.55)
+	hover_targ = th.mul(th.abs(state[:,0]), 0.65)
 
 	angle_todo = th.mul((angle_targ - state[:,4]),0.5) - state[:,5]
 	hover_todo = th.mul((hover_targ - state[:,1]),0.5) - th.mul(state[:,3],0.5)
