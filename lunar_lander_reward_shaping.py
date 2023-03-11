@@ -20,11 +20,9 @@ def calc_shaping_rewards(state, action):
 	"""
 	calculate the action the heuristic would choose, based on https://github.com/openai/gym/blob/master/gym/envs/box2d/lunar_lander.py
 	Then, compare that to the chosen action and assign a shaping reward to the agent
-
 	Input:
 	 - state: (batch size)x(8) tensor with current observations
 	 - action: (batch_size)x(2) tensor with current action
-
 	Output:
 	 - rewards: (batch_size)x(1) tensor with shaping rewards for each (s,a) pair in the batch.
 	"""
@@ -45,10 +43,16 @@ def calc_shaping_rewards(state, action):
 	heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
 	heuristic_action = th.clip(heuristic_action, -1, +1)
 
+	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
+	velocity_penalty = th.clip((th.abs(state[:,3])-0.15),0,0.4)
+	# hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0,0.1)
+	
+	# print(velocity_penalty)
+
 	# calculate the difference between the algorithm action and the heuristic action
 	# currently this is just a naive method, where the reward is the total negative
 	# absolute value difference between the two actions.
 	# We might look into more sophisticated methods if time allows
-	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1)
+	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1) - velocity_penalty
 
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
