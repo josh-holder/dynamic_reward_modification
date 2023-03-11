@@ -21,7 +21,7 @@ from drm.drm_policies import DRMPolicy
 
 def train() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n-critics",help="Number of critics in ensemble", default=10, type=int)
+    parser.add_argument("--n-critics",help="Number of critics in ensemble", default=2, type=int)
     parser.add_argument("--algo", help="RL Algorithm", default="drm", type=str, required=False, choices=list(ALGOS.keys()))
     parser.add_argument("--env", type=str, default="LunarLanderContinuous-v2", help="environment ID")
     parser.add_argument("-tb", "--tensorboard-log", help="Tensorboard log dir", default="", type=str)

@@ -142,8 +142,8 @@ class DRM(OffPolicyAlgorithm):
         self.actor_target = self.policy.actor_target
         self.critic = self.policy.critic
         self.critic_target = self.policy.critic_target
-        self.rnd_target = self.policy.rnd_target
-        self.rnd_learner = self.policy.rnd_learner
+        # self.rnd_target = self.policy.rnd_target
+        # self.rnd_learner = self.policy.rnd_learner
 
     def get_q_variance_scaling(self, q_values):
         """
@@ -163,7 +163,7 @@ class DRM(OffPolicyAlgorithm):
         self.policy.set_training_mode(True)
 
         # Update learning rate according to lr schedule
-        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer, self.rnd_learner.optimizer])
+        self._update_learning_rate([self.actor.optimizer, self.critic.optimizer])
 
         actor_losses, critic_losses, rnd_losses = [], [], []
         for _ in range(gradient_steps):
