@@ -16,14 +16,13 @@ import rl_zoo3.import_envs  # noqa: F401 pytype: disable=import-error
 from flexible_exp_manager import FlexibleExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from drm.drm import DRM
-from drm.drm_policies import DRMPolicy
-
+from ddqn.ddqn import DDQN
 
 def train() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-critics",help="Number of critics in ensemble", default=10, type=int)
-    parser.add_argument("--algo", help="RL Algorithm", default="drm", type=str, required=False, choices=list(ALGOS.keys()))
-    parser.add_argument("--env", type=str, default="LunarLanderContinuous-v2", help="environment ID")
+    parser.add_argument("--algo", help="RL Algorithm", default="ddqn", type=str, required=False, choices=list(ALGOS.keys()))
+    parser.add_argument("--env", type=str, default="CliffWalking-v0", help="environment ID")
     parser.add_argument("-tb", "--tensorboard-log", help="Tensorboard log dir", default="", type=str)
     parser.add_argument("-i", "--trained-agent", help="Path to a pretrained agent to continue training", default="", type=str)
     parser.add_argument(
@@ -129,7 +128,7 @@ def train() -> None:
         "-conf",
         "--conf-file",
         type=str,
-        default="drm/drm.yml",
+        default="ddqn/ddqn.yml",
         help="Custom yaml file or python package from which the hyperparameters will be loaded."
         "We expect that python packages contain a dictionary called 'hyperparams' which contains a key for each environment.",
     )
@@ -147,7 +146,7 @@ def train() -> None:
         default=False,
         help="if toggled, this experiment will be tracked with Weights and Biases",
     )
-    parser.add_argument("--wandb-project-name", type=str, default="Dynamic Reward Modification", help="the wandb's project name")
+    parser.add_argument("--wandb-project-name", type=str, default="Discrete DRM", help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None, help="the entity (team) of wandb's project")
     parser.add_argument("--wandb-run-name",type=str, default=None, help="the run name to be used in wandb")
     parser.add_argument(
@@ -228,17 +227,17 @@ def train() -> None:
         )
         args.tensorboard_log = f"runs/{run_name}"
 
-    #Create new algorithm list which includes DRM
+    #Create new algorithm list which includes DRM and DDQN
     FULL_ALGO_LIST = ALGOS
     FULL_ALGO_LIST["drm"] = DRM
+    FULL_ALGO_LIST["ddqn"] = DDQN
 
-    #initialize policy kwargs with n_critics
+    # #initialize policy kwargs with n_critics
     policy_kwargs = {}
-    policy_kwargs['n_critics'] = args.n_critics
-
+    # policy_kwargs['n_critics'] = args.n_critics
     exp_manager = FlexibleExperimentManager(
         args,
-        "drm",
+        args.algo,
         FULL_ALGO_LIST,
         env_id,
         args.log_folder,

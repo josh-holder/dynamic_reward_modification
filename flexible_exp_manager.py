@@ -146,8 +146,9 @@ class FlexibleExperimentManager(ExperimentManager):
                 policy_kwargs=policy_kwargs,
                 **self._hyperparams,
             )
-
+        print("helooooo")
         self._save_config(saved_hyperparams)
+        print("help")
         return model, saved_hyperparams
     
     def _load_pretrained_agent(self, hyperparams: Dict[str, Any], env: VecEnv) -> BaseAlgorithm:
