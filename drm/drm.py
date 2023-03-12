@@ -277,7 +277,7 @@ class DRM(OffPolicyAlgorithm):
         # Update learning rate according to lr schedule
         self._update_learning_rate([self.actor.optimizer, self.critic.optimizer])
 
-        actor_losses, critic_losses, rnd_losses = [], [], []
+        actor_losses, critic_losses, rnd_losses, q_stds = [], [], [], []
         for _ in range(gradient_steps):
             self._n_updates += 1
             # Sample replay buffer
@@ -307,6 +307,7 @@ class DRM(OffPolicyAlgorithm):
                 next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
 
                 q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
+                q_stds.append(q_variance_scaling.mean().item())
                 shaped_rewards = replay_data.rewards + th.mul(q_variance_scaling,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 # shaped_rewards = replay_data.rewards
 
@@ -343,7 +344,7 @@ class DRM(OffPolicyAlgorithm):
         if len(actor_losses) > 0:
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
-        self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
+        self.logger.record("train/reward_scale", sum(q_stds)/len(q_stds))
         self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
 
     def learn(
