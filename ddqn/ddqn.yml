@@ -90,7 +90,7 @@ CliffWalking-v0:
   buffer_size: 50000
   learning_starts: 0
   gamma: 0.99
-  target_update_interval: 250
+  target_update_interval: 100
   train_freq: 4
   gradient_steps: -1
   exploration_fraction: 0.12
