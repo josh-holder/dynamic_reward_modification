@@ -29,8 +29,12 @@ def calc_shaping_rewards(state, action):
 	#Calculate angle target, clipped between +- 0.4
 	angle_targ = th.mul(state[:,0],0.5) + state[:,2]
 	angle_targ = th.clip(angle_targ, -0.4, 0.4)
+	angle_noise = th.ones_like(angle_targ)*0.05
+	angle_targ = angle_targ + angle_noise
 
 	hover_targ = th.mul(th.abs(state[:,0]), 0.55)
+	hover_noise = th.ones_like(hover_targ)*0.1
+	hover_targ = hover_targ + hover_noise
 
 	angle_todo = th.mul((angle_targ - state[:,4]),0.5) - state[:,5]
 	hover_todo = th.mul((hover_targ - state[:,1]),0.5) - th.mul(state[:,3],0.5)
@@ -44,7 +48,7 @@ def calc_shaping_rewards(state, action):
 	heuristic_action = th.clip(heuristic_action, -1, +1)
 
 	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
-	velocity_penalty = th.clip((th.abs(state[:,3])-0.15),0,0.4)
+	velocity_penalty = th.clip((th.abs(state[:,3])-0.2),0,0.3)
 	# hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0,0.1)
 	
 	# print(velocity_penalty)

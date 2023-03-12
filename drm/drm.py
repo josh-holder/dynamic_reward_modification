@@ -165,7 +165,7 @@ class DRM(OffPolicyAlgorithm):
         # Update learning rate according to lr schedule
         self._update_learning_rate([self.actor.optimizer, self.critic.optimizer])
 
-        actor_losses, critic_losses, rnd_losses = [], [], []
+        actor_losses, critic_losses, norm_qstds, avg_q_values = [], [], [], []
         for _ in range(gradient_steps):
             self._n_updates += 1
             # Sample replay buffer
@@ -196,12 +196,11 @@ class DRM(OffPolicyAlgorithm):
 
                 # q_variance_scaling = self.get_q_variance_scaling(single_tensor_current_q_values)
                 q_std_devs = th.std(single_tensor_current_q_values, dim=1)
-                avg_q_std_dev = q_std_devs.mean().item()
-                if avg_q_std_dev > self.max_avg_q_std:
-                    self.max_avg_q_std = avg_q_std_dev
-                # print(f"Max avg {self.max_avg_q_std}")
+
+                avg_q_values.append(th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
 
                 normalized_q_std_devs = th.clip(th.div(q_std_devs, self.max_avg_q_std).unsqueeze(1), 0, 1)
+                norm_qstds.append(th.mean(normalized_q_std_devs).item())
 
                 shaped_rewards = th.mul(normalized_q_std_devs,calc_shaping_rewards(replay_data.observations, replay_data.actions))
                 # print(f"Normalized qstd avg {normalized_q_std_devs.mean().item()}"
@@ -249,15 +248,19 @@ class DRM(OffPolicyAlgorithm):
                 polyak_update(self.critic_batch_norm_stats, self.critic_batch_norm_stats_target, 1.0)
                 polyak_update(self.actor_batch_norm_stats, self.actor_batch_norm_stats_target, 1.0)
 
+        avg_q_std_dev = sum(norm_qstds)/len(norm_qstds)
+        if avg_q_std_dev > self.max_avg_q_std:
+            self.max_avg_q_std = avg_q_std_dev
+
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         if len(actor_losses) > 0:
             self.logger.record("train/actor_loss", np.mean(actor_losses))
         self.logger.record("train/critic_loss", np.mean(critic_losses))
         # self.logger.record("train/reward_scale", th.mean(q_variance_scaling).item())
-        self.logger.record("train/qs", th.mean(th.mean(single_tensor_current_q_values, dim=1)).item())
+        self.logger.record("train/qs", sum(avg_q_values)/len(avg_q_values))
         # self.logger.record("train/rnd_loss", np.mean(rnd_losses))
         self.logger.record("train/max_avg_qstd", self.max_avg_q_std)
-        self.logger.record("train/avg_norm_qstd", normalized_q_std_devs.mean().item())
+        self.logger.record("train/avg_norm_qstd", sum(norm_qstds)/len(norm_qstds))
         # self.logger.record("train/shaped_reward_mag", th.mean(shaped_rewards).item())
         # self.logger.record("train/env_reward_mag", th.mean(replay_data.rewards).item())
 
