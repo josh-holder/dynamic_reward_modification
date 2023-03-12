@@ -191,10 +191,13 @@ class DDQN(OffPolicyAlgorithm):
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
             with th.no_grad():
-                # Compute the next Q-values using the target network
+                #Compute next actions using current network
+                next_q_values_for_actions = self.q_net(replay_data.next_observations)
+                _, next_actions = next_q_values_for_actions.max(dim=1)
+
+                # Retrieve the target network q-values for the current-network-selected actions
                 next_q_values = self.q_net_target(replay_data.next_observations)
-                # Follow greedy policy: use the one with the highest value
-                next_q_values, _ = next_q_values.max(dim=1)
+                next_q_values = th.gather(next_q_values, dim=1, index=next_actions.unsqueeze(1))
 
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
