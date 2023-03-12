@@ -83,7 +83,7 @@ Acrobot-v1:
 
 # Tuned
 CliffWalking-v0:
-  n_timesteps: !!float 1e5
+  n_timesteps: 10000
   policy: 'MlpPolicy'
   learning_rate: !!float 6.3e-4
   batch_size: 128

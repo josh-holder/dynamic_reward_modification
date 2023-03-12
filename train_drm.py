@@ -39,7 +39,7 @@ def train() -> None:
         "--eval-freq",
         help="Evaluate the agent every n steps (if negative, no evaluation). "
         "During hyperparameter optimization n-evaluations is used instead",
-        default=25000,
+        default=10000,
         type=int,
     )
     parser.add_argument(

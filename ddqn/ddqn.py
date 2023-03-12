@@ -14,6 +14,8 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, is_vectorized_observation, polyak_update
 from ddqn.ddqn_policies import CnnPolicy, DDQNPolicy, MlpPolicy, MultiInputPolicy
 
+from cliff_reward_shaping import calc_shaping_rewards
+
 SelfDDQN = TypeVar("SelfDDQN", bound="DDQN")
 
 
@@ -158,7 +160,6 @@ class DDQN(OffPolicyAlgorithm):
                 )
 
             self.target_update_interval = max(self.target_update_interval // self.n_envs, 1)
-        print("??")
 
     def _create_aliases(self) -> None:
         self.q_net = self.policy.q_net
@@ -194,10 +195,14 @@ class DDQN(OffPolicyAlgorithm):
                 next_q_values = self.q_net_target(replay_data.next_observations)
                 # Follow greedy policy: use the one with the highest value
                 next_q_values, _ = next_q_values.max(dim=1)
+
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
-                target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+                shaping_rewards = calc_shaping_rewards(replay_data.observations,replay_data.actions)
+                # shaping_rewards = th.zeros_like(replay_data.rewards)
+
+                target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
             # Get current Q-values estimates
             current_q_values = self.q_net(replay_data.observations)
@@ -218,6 +223,7 @@ class DDQN(OffPolicyAlgorithm):
 
         # Increase update counter
         self._n_updates += gradient_steps
+        print(self._n_updates)
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
