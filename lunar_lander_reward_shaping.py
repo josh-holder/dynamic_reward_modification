@@ -47,12 +47,14 @@ def calc_shaping_rewards(state, action):
 	velocity_penalty = th.clip((th.abs(state[:,3])-0.10),0,0.5)
 	# hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0,0.1)
 	
+	offset_fuel_pen = th.where(action[:,0], 0, 0.15)
+
 	# print(velocity_penalty)
 
 	# calculate the difference between the algorithm action and the heuristic action
 	# currently this is just a naive method, where the reward is the total negative
 	# absolute value difference between the two actions.
 	# We might look into more sophisticated methods if time allows
-	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1) - velocity_penalty
+	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1) - velocity_penalty + offset_fuel_pen
 
 	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
