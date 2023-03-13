@@ -86,7 +86,7 @@ CliffWalking-v0:
   n_timesteps: 15000
   policy: 'MlpPolicy'
   learning_rate: !!float 6.3e-4
-  batch_size: 128
+  batch_size: 256
   buffer_size: 5000
   learning_starts: 0
   gamma: 0.99

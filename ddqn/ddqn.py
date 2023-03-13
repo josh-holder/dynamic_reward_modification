@@ -89,7 +89,7 @@ class DDQN(OffPolicyAlgorithm):
         exploration_fraction: float = 0.1,
         exploration_initial_eps: float = 1.0,
         exploration_final_eps: float = 0.05,
-        max_grad_norm: float = 10,
+        max_grad_norm: float = 20,
         tensorboard_log: Optional[str] = None,
         policy_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
@@ -293,14 +293,15 @@ class DDQN(OffPolicyAlgorithm):
             # print(current_q_net2_values[0:5])
             
             # Compute Huber loss (less sensitive to outliers)
-            q_net1_loss = F.smooth_l1_loss(current_q_net1_values, q_net1_relevant_target_q_values)
+            q_net1_loss = F.mse_loss(current_q_net1_values, q_net1_relevant_target_q_values)
             q_net1_losses.append(q_net1_loss.item())
 
-            q_net2_loss = F.smooth_l1_loss(current_q_net2_values, q_net2_relevant_target_q_values)
+            q_net2_loss = F.mse_loss(current_q_net2_values, q_net2_relevant_target_q_values)
             q_net2_losses.append(q_net2_loss.item())
 
             # Optimize the policy
             self.policy.optimizer.zero_grad()
+
             q_net1_loss.backward()
             q_net2_loss.backward()
 
