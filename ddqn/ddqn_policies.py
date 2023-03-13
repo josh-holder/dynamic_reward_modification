@@ -13,6 +13,7 @@ from stable_baselines3.common.torch_layers import (
     create_mlp,
 )
 from stable_baselines3.common.type_aliases import Schedule
+import numpy as np
 
 
 class QNetwork(BasePolicy):
@@ -83,43 +84,6 @@ class QNetwork(BasePolicy):
         )
         return data
 
-class ContinuousRNDNetwork(BaseModel):
-    """
-    RND Networks for DRM.
-    :param observation_space: Obervation space
-    :param net_arch: Network architecture
-    :param features_extractor: Network to extract features
-        (a CNN when using images, a nn.Flatten() layer otherwise)
-    :param features_dim: Number of features
-    :param activation_fn: Activation function
-    :param normalize_images: Whether to normalize images or not,
-         dividing by 255.0 (True by default)
-    """
-
-    def __init__(
-        self,
-        observation_space: spaces.Space,
-        net_arch: List[int],
-        features_extractor: nn.Module,
-        features_dim: int,
-        activation_fn: Type[nn.Module] = nn.ReLU,
-        normalize_images: bool = True,
-    ):
-        super().__init__(
-            observation_space,
-            None, #no action space
-            features_extractor=features_extractor,
-            normalize_images=normalize_images,
-        )
-
-        self.model = create_mlp(features_dim, 1, net_arch, activation_fn)
-        self.model = nn.Sequential(*self.model)
-        self.add_module("model", self.model)
-
-    def forward(self, obs: th.Tensor) -> Tuple[th.Tensor, ...]:
-        features = self.extract_features(obs, self.features_extractor)
-        return self.model(features)
-
 class DDQNPolicy(BasePolicy):
     """
     Policy class with Q-Value Net and target net for DDQN
@@ -180,7 +144,7 @@ class DDQNPolicy(BasePolicy):
             "normalize_images": normalize_images,
         }
 
-        self.q_net, self.q_net_target = None, None
+        self.q_net1, self.q_net2 = None, None
         self._build(lr_schedule)
 
     def _build(self, lr_schedule: Schedule) -> None:
@@ -193,16 +157,8 @@ class DDQNPolicy(BasePolicy):
             lr_schedule(1) is the initial learning rate
         """
 
-        self.q_net = self.make_q_net()
-        self.q_net_target = self.make_q_net()
-        self.q_net_target.load_state_dict(self.q_net.state_dict())
-        self.q_net_target.set_training_mode(False)
-
-        #Create RND networks
-        self.rnd_target = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner = self.make_rnd_network(features_extractor=None)
-        self.rnd_learner.set_training_mode(False)
-        self.rnd_learner.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
+        self.q_net1 = self.make_q_net()
+        self.q_net2 = self.make_q_net()
 
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
@@ -211,20 +167,17 @@ class DDQNPolicy(BasePolicy):
         # Make sure we always have separate networks for features extractors etc
         net_args = self._update_features_extractor(self.net_args, features_extractor=None)
         return QNetwork(**net_args).to(self.device)
-    
-    def make_rnd_network(self, features_extractor: Optional[BaseFeaturesExtractor] = None) -> ContinuousRNDNetwork:
-        #copy the net args
-        rnd_kwargs = self._update_features_extractor(self.net_args, features_extractor)
-
-        #Remove unnecessary keys from net_args before passing to RND:
-        rnd_kwargs.pop('action_space')
-        return ContinuousRNDNetwork(**rnd_kwargs).to(self.device)
 
     def forward(self, obs: th.Tensor, deterministic: bool = True) -> th.Tensor:
         return self._predict(obs, deterministic=deterministic)
 
     def _predict(self, obs: th.Tensor, deterministic: bool = True) -> th.Tensor:
-        return self.q_net._predict(obs, deterministic=deterministic)
+        q_net_choice = np.random.randint(2) #0 or 1
+        if q_net_choice: 
+            return self.q_net1._predict(obs, deterministic=deterministic)
+        else: 
+            return self.q_net2._predict(obs,deterministic=deterministic)
+        
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
         data = super()._get_constructor_parameters()
@@ -250,7 +203,8 @@ class DDQNPolicy(BasePolicy):
 
         :param mode: if true, set to training mode, else set to evaluation mode
         """
-        self.q_net.set_training_mode(mode)
+        self.q_net1.set_training_mode(mode)
+        self.q_net2.set_training_mode(mode)
         self.training = mode
 
 

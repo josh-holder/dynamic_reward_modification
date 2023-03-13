@@ -17,6 +17,7 @@ from ddqn.ddqn_policies import CnnPolicy, DDQNPolicy, MlpPolicy, MultiInputPolic
 from cliff_reward_shaping import calc_shaping_rewards
 
 SelfDDQN = TypeVar("SelfDDQN", bound="DDQN")
+import time
 
 
 class DDQN(OffPolicyAlgorithm):
@@ -132,7 +133,7 @@ class DDQN(OffPolicyAlgorithm):
         self.exploration_rate = 0.0
         # Linear schedule will be defined in `_setup_model()`
         self.exploration_schedule = None
-        self.q_net, self.q_net_target = None, None
+        self.q_net1, self.q_net2 = None, None
 
         # self.max_avg_rnd_loss = 0
         self.max_qdiffs = 0
@@ -144,8 +145,8 @@ class DDQN(OffPolicyAlgorithm):
         super()._setup_model()
         self._create_aliases()
         # Copy running stats, see GH issue #996
-        self.batch_norm_stats = get_parameters_by_name(self.q_net, ["running_"])
-        self.batch_norm_stats_target = get_parameters_by_name(self.q_net_target, ["running_"])
+        self.batch_norm_stats1 = get_parameters_by_name(self.q_net1, ["running_"])
+        self.batch_norm_stats2 = get_parameters_by_name(self.q_net2, ["running_"])
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps,
             self.exploration_final_eps,
@@ -165,10 +166,8 @@ class DDQN(OffPolicyAlgorithm):
             self.target_update_interval = max(self.target_update_interval // self.n_envs, 1)
 
     def _create_aliases(self) -> None:
-        self.q_net = self.policy.q_net
-        self.q_net_target = self.policy.q_net_target
-        self.rnd_target = self.policy.rnd_target
-        self.rnd_learner = self.policy.rnd_learner
+        self.q_net1 = self.policy.q_net1
+        self.q_net2 = self.policy.q_net2
 
     def _on_step(self) -> None:
         """
@@ -176,10 +175,10 @@ class DDQN(OffPolicyAlgorithm):
         This method is called in ``collect_rollouts()`` after each step in the environment.
         """
         self._n_calls += 1
-        if self._n_calls % self.target_update_interval == 0:
-            polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
-            # Copy running stats, see GH issue #996
-            polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
+        # if self._n_calls % self.target_update_interval == 0:
+        #     polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+        #     # Copy running stats, see GH issue #996
+        #     polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         self.logger.record("rollout/exploration_rate", self.exploration_rate)
@@ -188,46 +187,67 @@ class DDQN(OffPolicyAlgorithm):
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
         # Update learning rate according to schedule
-        self._update_learning_rate([self.policy.optimizer, self.rnd_learner.optimizer])
+        self._update_learning_rate([self.policy.optimizer])
 
-        losses, q_diffs_for_all_batches, reward_scalings = [], [], []
+        q_net1_losses, q_net2_losses, q_diffs_for_all_batches, reward_scalings = [], [], [], []
         for _ in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
             with th.no_grad():
-                # target_rnd_vals = self.rnd_target(replay_data.observations)
-                # rnd_differences = th.abs(target_rnd_vals - self.rnd_learner(replay_data.observations))
-                # avg_rnd_differences = rnd_differences.mean().item()
+                random_q_net_choices = th.randint(0,2,(batch_size,1)).bool()
 
-                # if avg_rnd_differences > self.max_avg_rnd_loss:
-                #     self.max_avg_rnd_loss = avg_rnd_differences
+                #network 1 greedy actions and q values
+                q_net1_next_q_values = self.q_net1(replay_data.next_observations)
+                q_net1_greedy_next_q_values, q_net1_greedy_next_actions = q_net1_next_q_values.max(dim=1)
 
-                # normalized_rnd_differences = rnd_differences/self.max_avg_rnd_loss
+                # print("QNET1 all values:")
+                # print(q_net1_next_q_values[0:5])
+                # print("QNET1 greedy actions:")
+                # print(q_net1_greedy_next_actions[0:5])
 
-                #DDQN STYLE UPDATES
-                #Compute next actions using current network
-                next_q_values_for_actions = self.q_net(replay_data.next_observations)
-                best_next_q_values_from_current, next_actions = next_q_values_for_actions.max(dim=1)
+                #network 2 greedy actions and q values
+                q_net2_next_q_values = self.q_net2(replay_data.next_observations)
+                q_net2_greedy_next_q_values, q_net2_greedy_next_actions = q_net2_next_q_values.max(dim=1)
 
-                # Retrieve the target network q-values for the current-network-selected actions
-                next_q_values = self.q_net_target(replay_data.next_observations)
-                next_q_values = th.gather(next_q_values, dim=1, index=next_actions.unsqueeze(1))
+                # print("QNET2 all values:")
+                # print(q_net2_next_q_values[0:5])
+                # print("QNET2 greedy actions:")
+                # print(q_net2_greedy_next_actions[0:5])
 
-                # # #REGULAR DQN UPDATES
-                # #Compute next actions using current network
-                # next_q_values_from_current = self.q_net(replay_data.next_observations)
-                # best_next_q_values_from_current, _ = next_q_values_from_current.max(dim=1)
+                #convert greedy next actions to (batchsize x 1) from (batchsize)
+                q_net1_greedy_next_actions = q_net1_greedy_next_actions.unsqueeze(1)
+                q_net2_greedy_next_actions = q_net2_greedy_next_actions.unsqueeze(1)
 
-                # # Compute the next Q-values using the target network
-                # next_q_values = self.q_net_target(replay_data.next_observations)
-                # # Follow greedy policy: use the one with the highest value
-                # next_q_values, _ = next_q_values.max(dim=1)
+                #Choose greedy actions from the appropriate q networks
+                chosen_next_actions = th.where(random_q_net_choices, q_net1_greedy_next_actions, q_net2_greedy_next_actions)
+
+                # print("Random q net choices:")
+                # print(random_q_net_choices[0:5])
+
+                # print("Chosen next actions:")
+                # print(chosen_next_actions[0:5])
+
+                #Query q networks for each of the chosen actions
+                q_net1_q_values_for_chosen_actions = th.gather(q_net1_next_q_values, dim=1, index=chosen_next_actions)
+                q_net2_q_values_for_chosen_actions = th.gather(q_net2_next_q_values, dim=1, index=chosen_next_actions)
+
+                # print("QNET1 values for chosen actions:")
+                # print(q_net1_q_values_for_chosen_actions[0:5])
+                # print("QNET2 values for chosen actions:")
+                # print(q_net2_q_values_for_chosen_actions[0:5])
+
+                #Query the other q networks for the value of these greedy actions
+                q_vals_for_chosen_actions = th.where(random_q_net_choices, q_net2_q_values_for_chosen_actions, q_net1_q_values_for_chosen_actions)
+                # print("Final q values for chosen actions:")
+                # print(q_vals_for_chosen_actions[0:5])
 
                 #calculate q function variance over time
-                q_diffs_for_batch = th.abs(best_next_q_values_from_current.unsqueeze(1) - next_q_values.unsqueeze(1))
+                q_diffs_for_batch = th.abs(q_net1_q_values_for_chosen_actions - q_net2_q_values_for_chosen_actions)
                 avg_batch_q_diff = th.mean(q_diffs_for_batch).item()
                 q_diffs_for_all_batches.append(avg_batch_q_diff)
+                # print("Q diffs for batch:")
+                # print(q_diffs_for_batch[0:5])
 
                 if avg_batch_q_diff > self.max_qdiffs:
                     self.max_qdiffs = avg_batch_q_diff
@@ -235,7 +255,7 @@ class DDQN(OffPolicyAlgorithm):
                 shaping_reward_scaling = th.clip(q_diffs_for_batch/self.max_qdiffs,0,1)
 
                 # Avoid potential broadcast issue
-                next_q_values = next_q_values.reshape(-1, 1)
+                q_vals_for_chosen_actions = q_vals_for_chosen_actions.reshape(-1, 1)
                 # 1-step TD target
                 # shaping_reward_scaling = self._current_progress_remaining
                 try:
@@ -246,35 +266,45 @@ class DDQN(OffPolicyAlgorithm):
                 shaping_rewards = th.mul(0, calc_shaping_rewards(replay_data.observations,replay_data.actions))
                 # shaping_rewards = th.zeros_like(replay_data.rewards)
 
-                target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+                target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * q_vals_for_chosen_actions
 
+                q_net1_target_q_values = th.where(random_q_net_choices, target_q_values, 0)
+                q_net2_target_q_values = th.where(random_q_net_choices, 0, target_q_values)
+
+                # print("QNET1 targets for chosen actions:")
+                # print(q_net1_target_q_values[0:5])
+                # print("QNET2 targets for chosen actions:")
+                # print(q_net2_target_q_values[0:5])
+
+            
             # Get current Q-values estimates
-            current_q_values = self.q_net(replay_data.observations)
+            current_q_net1_values = th.where(random_q_net_choices, self.q_net1(replay_data.observations), 0)
+            current_q_net2_values = th.where(random_q_net_choices, 0, self.q_net2(replay_data.observations))
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
+            current_q_net1_values = th.gather(current_q_net1_values, dim=1, index=replay_data.actions.long())
+            current_q_net2_values = th.gather(current_q_net2_values, dim=1, index=replay_data.actions.long())
 
+            # print("QNET1 current vals for chosen actions:")
+            # print(current_q_net1_values[0:5])
+            # print("QNET2 current vals for chosen actions:")
+            # print(current_q_net2_values[0:5])
+            
             # Compute Huber loss (less sensitive to outliers)
-            loss = F.smooth_l1_loss(current_q_values, target_q_values)
-            losses.append(loss.item())
+            q_net1_loss = F.smooth_l1_loss(current_q_net1_values, q_net1_target_q_values)
+            q_net1_losses.append(q_net1_loss.item())
+
+            q_net2_loss = F.smooth_l1_loss(current_q_net2_values, q_net2_target_q_values)
+            q_net2_losses.append(q_net2_loss.item())
 
             # Optimize the policy
             self.policy.optimizer.zero_grad()
-            loss.backward()
+            q_net1_loss.backward()
+            q_net2_loss.backward()
+
             # Clip gradient norm
             th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
-
-            # #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
-            # #This feels... not ideal, and indiciative of a deeper problem...
-            # #Compute RND loss
-            # rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
-            # rnd_losses.append(rnd_loss.item())
-
-            # #optimize the RND learner
-            # self.rnd_learner.optimizer.zero_grad()
-            # rnd_loss.backward()
-            # self.rnd_learner.optimizer.step()
 
         # Increase update counter
         self._n_updates += gradient_steps
@@ -283,7 +313,8 @@ class DDQN(OffPolicyAlgorithm):
         # self.logger.record("train/max_avg_rnd_std", self.max_avg_rnd_loss)
         self.logger.record("train/reward_scale", np.mean(reward_scalings))
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
-        self.logger.record("train/loss", np.mean(losses))
+        self.logger.record("train/q_net1_loss", np.mean(q_net1_losses))
+        self.logger.record("train/q_net2_loss", np.mean(q_net2_losses))
         self.logger.record("train/qdiffs", np.mean(q_diffs_for_all_batches))
 
     def predict(
@@ -313,6 +344,7 @@ class DDQN(OffPolicyAlgorithm):
             else:
                 action = np.array(self.action_space.sample())
         else:
+            #chooses between q networks randomly
             action, state = self.policy.predict(observation, state, episode_start, deterministic)
         return action, state
 
@@ -335,7 +367,7 @@ class DDQN(OffPolicyAlgorithm):
         )
 
     def _excluded_save_params(self) -> List[str]:
-        return super()._excluded_save_params() + ["q_net", "q_net_target"]
+        return super()._excluded_save_params() + ["q_net1", "q_net2"]
 
     def _get_torch_save_params(self) -> Tuple[List[str], List[str]]:
         state_dicts = ["policy", "policy.optimizer"]
