@@ -276,7 +276,6 @@ class DDQN(OffPolicyAlgorithm):
         self._n_updates += gradient_steps
 
         # self.logger.record("train/max_avg_rnd_std", self.max_avg_rnd_loss)
-        print(reward_scalings)
         self.logger.record("train/reward_scale", np.mean(reward_scalings))
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
