@@ -14,7 +14,7 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, is_vectorized_observation, polyak_update
 from ddqn.ddqn_policies import CnnPolicy, DDQNPolicy, MlpPolicy, MultiInputPolicy
 
-from cliff_reward_shaping import calc_shaping_rewards
+from lunar_lander_reward_shaping import calc_shaping_rewards
 
 SelfDDQN = TypeVar("SelfDDQN", bound="DDQN")
 
@@ -274,7 +274,6 @@ class DDQN(OffPolicyAlgorithm):
 
         # Increase update counter
         self._n_updates += gradient_steps
-        print(self._n_updates)
 
         # self.logger.record("train/max_avg_rnd_std", self.max_avg_rnd_loss)
         self.logger.record("train/reward_scale", np.mean(reward_scalings))

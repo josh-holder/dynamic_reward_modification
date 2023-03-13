@@ -42,11 +42,16 @@ def calc_shaping_rewards(state, action):
 	angle_todo = th.where(landing_leg_down,0,angle_todo)
 	hover_todo = th.where(landing_leg_down,th.mul(state[:,3],-0.5), hover_todo)
 
-	heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
-	heuristic_action = th.clip(heuristic_action, -1, +1)
+	# heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
+	# heuristic_action = th.clip(heuristic_action, -1, +1)
+
+	heuristic_action = th.zeros_like(hover_targ)
+	heuristic_action = th.where(th.logical_and(th.gt(hover_todo,th.abs(angle_todo)), th.gt(hover_todo, 0.05)), 2, 0)
+	heuristic_action = th.where(th.lt(angle_todo, -0.05), 3, 0)
+	heuristic_action = th.where(th.gt(angle_todo, 0.05), 1, 0)
 
 	# velocity = th.sqrt(th.square(state[:,2])+th.square(state[:,3]))
-	velocity_penalty = th.clip((th.abs(state[:,3])-0.15),0,0.4)
+	velocity_penalty = th.clip((th.abs(state[:,3])-0.15),0,0.4).unsqueeze(1)
 	# hover_bonus = th.where(th.logical_and(th.le(state[:,3],0.1),th.ge(state[:,3],-0.1)),0,0.1)
 	
 	# print(velocity_penalty)
@@ -55,6 +60,9 @@ def calc_shaping_rewards(state, action):
 	# currently this is just a naive method, where the reward is the total negative
 	# absolute value difference between the two actions.
 	# We might look into more sophisticated methods if time allows
-	rewards = th.mul((th.abs(heuristic_action[0] - action[:,0]) + th.abs(heuristic_action[1] - action[:,1])), -1) - velocity_penalty
 
-	return rewards.unsqueeze(1) #convert from 100 -> 100x1 before returning
+	action_cost = th.where(action!=heuristic_action.unsqueeze(1), -1, 1)
+
+	rewards = action_cost - velocity_penalty
+
+	return rewards #convert from 100 -> 100x1 before returning

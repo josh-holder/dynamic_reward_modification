@@ -22,7 +22,7 @@ def train() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-critics",help="Number of critics in ensemble", default=10, type=int)
     parser.add_argument("--algo", help="RL Algorithm", default="ddqn", type=str, required=False, choices=list(ALGOS.keys()))
-    parser.add_argument("--env", type=str, default="CliffWalking-v0", help="environment ID")
+    parser.add_argument("--env", type=str, default="LunarLander-v2", help="environment ID")
     parser.add_argument("-tb", "--tensorboard-log", help="Tensorboard log dir", default="", type=str)
     parser.add_argument("-i", "--trained-agent", help="Path to a pretrained agent to continue training", default="", type=str)
     parser.add_argument(
@@ -146,7 +146,7 @@ def train() -> None:
         default=False,
         help="if toggled, this experiment will be tracked with Weights and Biases",
     )
-    parser.add_argument("--wandb-project-name", type=str, default="Discrete DRM", help="the wandb's project name")
+    parser.add_argument("--wandb-project-name", type=str, default="Discrete Lander", help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None, help="the entity (team) of wandb's project")
     parser.add_argument("--wandb-run-name",type=str, default=None, help="the run name to be used in wandb")
     parser.add_argument(
