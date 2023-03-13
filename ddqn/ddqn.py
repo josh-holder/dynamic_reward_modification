@@ -214,8 +214,18 @@ class DDQN(OffPolicyAlgorithm):
                 next_q_values = self.q_net_target(replay_data.next_observations)
                 next_q_values = th.gather(next_q_values, dim=1, index=next_actions.unsqueeze(1))
 
+                # # #REGULAR DQN UPDATES
+                # #Compute next actions using current network
+                # next_q_values_from_current = self.q_net(replay_data.next_observations)
+                # best_next_q_values_from_current, _ = next_q_values_from_current.max(dim=1)
+
+                # # Compute the next Q-values using the target network
+                # next_q_values = self.q_net_target(replay_data.next_observations)
+                # # Follow greedy policy: use the one with the highest value
+                # next_q_values, _ = next_q_values.max(dim=1)
+
                 #calculate q function variance over time
-                q_diffs_for_batch = th.abs(best_next_q_values_from_current.unsqueeze(1) - next_q_values)
+                q_diffs_for_batch = th.abs(best_next_q_values_from_current.unsqueeze(1) - next_q_values.unsqueeze(1))
                 avg_batch_q_diff = th.mean(q_diffs_for_batch).item()
                 q_diffs_for_all_batches.append(avg_batch_q_diff)
 
@@ -224,16 +234,10 @@ class DDQN(OffPolicyAlgorithm):
 
                 shaping_reward_scaling = th.clip(q_diffs_for_batch/self.max_qdiffs,0,1)
 
-                # # #REGULAR DQN UPDATES
-                # # Compute the next Q-values using the target network
-                # next_q_values = self.q_net_target(replay_data.next_observations)
-                # # Follow greedy policy: use the one with the highest value
-                # next_q_values, _ = next_q_values.max(dim=1)
-
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
-                shaping_reward_scaling = self._current_progress_remaining
+                # shaping_reward_scaling = self._current_progress_remaining
                 try:
                     reward_scalings.append(th.mean(shaping_reward_scaling).item())
                 except TypeError:
