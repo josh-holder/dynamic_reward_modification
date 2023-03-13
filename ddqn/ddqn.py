@@ -268,22 +268,24 @@ class DDQN(OffPolicyAlgorithm):
 
                 target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * q_vals_for_chosen_actions
 
-                q_net1_target_q_values = th.where(random_q_net_choices, target_q_values, 0)
-                q_net2_target_q_values = th.where(random_q_net_choices, 0, target_q_values)
+                q_net1_relevant_target_q_values = th.masked_select(target_q_values, random_q_net_choices).unsqueeze(1)
+                q_net2_relevant_target_q_values = th.masked_select(target_q_values, ~random_q_net_choices).unsqueeze(1)
 
-                # print("QNET1 targets for chosen actions:")
-                # print(q_net1_target_q_values[0:5])
-                # print("QNET2 targets for chosen actions:")
-                # print(q_net2_target_q_values[0:5])
+                q_net1_relevant_obs = th.masked_select(replay_data.observations, random_q_net_choices)
+                q_net2_relevant_obs = th.masked_select(replay_data.observations, ~random_q_net_choices)
 
-            
+                q_net1_relevant_actions = th.masked_select(replay_data.actions.long(), random_q_net_choices).unsqueeze(1)
+                q_net2_relevant_actions = th.masked_select(replay_data.actions.long(), ~random_q_net_choices).unsqueeze(1)
+
             # Get current Q-values estimates
-            current_q_net1_values = th.where(random_q_net_choices, self.q_net1(replay_data.observations), 0)
-            current_q_net2_values = th.where(random_q_net_choices, 0, self.q_net2(replay_data.observations))
+            current_q_net1_values = self.q_net1(q_net1_relevant_obs)
+            current_q_net2_values = self.q_net2(q_net2_relevant_obs)
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q_net1_values = th.gather(current_q_net1_values, dim=1, index=replay_data.actions.long())
-            current_q_net2_values = th.gather(current_q_net2_values, dim=1, index=replay_data.actions.long())
+            # print(current_q_net1_values.shape)
+            # print(q_net1_relevant_actions.shape)
+            current_q_net1_values = th.gather(current_q_net1_values, dim=1, index=q_net1_relevant_actions)
+            current_q_net2_values = th.gather(current_q_net2_values, dim=1, index=q_net2_relevant_actions)
 
             # print("QNET1 current vals for chosen actions:")
             # print(current_q_net1_values[0:5])
@@ -291,10 +293,10 @@ class DDQN(OffPolicyAlgorithm):
             # print(current_q_net2_values[0:5])
             
             # Compute Huber loss (less sensitive to outliers)
-            q_net1_loss = F.smooth_l1_loss(current_q_net1_values, q_net1_target_q_values)
+            q_net1_loss = F.smooth_l1_loss(current_q_net1_values, q_net1_relevant_target_q_values)
             q_net1_losses.append(q_net1_loss.item())
 
-            q_net2_loss = F.smooth_l1_loss(current_q_net2_values, q_net2_target_q_values)
+            q_net2_loss = F.smooth_l1_loss(current_q_net2_values, q_net2_relevant_target_q_values)
             q_net2_losses.append(q_net2_loss.item())
 
             # Optimize the policy

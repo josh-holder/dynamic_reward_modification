@@ -161,6 +161,7 @@ class DDQNPolicy(BasePolicy):
         self.q_net2 = self.make_q_net()
 
         # Setup optimizer with initial learning rate
+        
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
     def make_q_net(self) -> QNetwork:
