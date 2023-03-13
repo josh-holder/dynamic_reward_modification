@@ -87,7 +87,7 @@ CliffWalking-v0:
   policy: 'MlpPolicy'
   learning_rate: !!float 6.3e-4
   batch_size: 128
-  buffer_size: 50000
+  buffer_size: 2500
   learning_starts: 0
   gamma: 0.99
   target_update_interval: 100
