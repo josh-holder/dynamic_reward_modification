@@ -195,12 +195,13 @@ class DDQNPolicy(BasePolicy):
 
         self.q_net = self.make_q_net()
         self.q_net_target = self.make_q_net()
-        self.q_net_target.load_state_dict(self.q_net.state_dict())
+        # self.q_net_target.load_state_dict(self.q_net.state_dict())
         self.q_net_target.set_training_mode(False)
 
         #Create RND networks
         self.rnd_target = self.make_rnd_network(features_extractor=None)
         self.rnd_learner = self.make_rnd_network(features_extractor=None)
+        self.rnd_learner.set_training_mode(False)
         self.rnd_learner.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
         # Setup optimizer with initial learning rate

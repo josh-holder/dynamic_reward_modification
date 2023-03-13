@@ -134,7 +134,8 @@ class DDQN(OffPolicyAlgorithm):
         self.exploration_schedule = None
         self.q_net, self.q_net_target = None, None
 
-        self.max_avg_rnd_loss = 0
+        # self.max_avg_rnd_loss = 0
+        self.max_qdiffs = 0
 
         if _init_setup_model:
             self._setup_model()
@@ -189,41 +190,56 @@ class DDQN(OffPolicyAlgorithm):
         # Update learning rate according to schedule
         self._update_learning_rate([self.policy.optimizer, self.rnd_learner.optimizer])
 
-        losses, rnd_losses = [], []
+        losses, q_diffs_for_all_batches, reward_scalings = [], [], []
         for _ in range(gradient_steps):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
             with th.no_grad():
-                target_rnd_vals = self.rnd_target(replay_data.observations)
-                rnd_differences = th.abs(target_rnd_vals - self.rnd_learner(replay_data.observations))
-                avg_rnd_differences = rnd_differences.mean().item()
+                # target_rnd_vals = self.rnd_target(replay_data.observations)
+                # rnd_differences = th.abs(target_rnd_vals - self.rnd_learner(replay_data.observations))
+                # avg_rnd_differences = rnd_differences.mean().item()
 
-                if avg_rnd_differences > self.max_avg_rnd_loss:
-                    self.max_avg_rnd_loss = avg_rnd_differences
+                # if avg_rnd_differences > self.max_avg_rnd_loss:
+                #     self.max_avg_rnd_loss = avg_rnd_differences
 
-                normalized_rnd_differences = rnd_differences/self.max_avg_rnd_loss
+                # normalized_rnd_differences = rnd_differences/self.max_avg_rnd_loss
 
-                # #DDQN STYLE UPDATES
-                # #Compute next actions using current network
-                # next_q_values_for_actions = self.q_net(replay_data.next_observations)
-                # _, next_actions = next_q_values_for_actions.max(dim=1)
+                #DDQN STYLE UPDATES
+                #Compute next actions using current network
+                next_q_values_for_actions = self.q_net(replay_data.next_observations)
+                best_next_q_values_from_current, next_actions = next_q_values_for_actions.max(dim=1)
 
-                # # Retrieve the target network q-values for the current-network-selected actions
-                # next_q_values = self.q_net_target(replay_data.next_observations)
-                # next_q_values = th.gather(next_q_values, dim=1, index=next_actions.unsqueeze(1))
-
-                # #REGULAR DQN UPDATES
-                # Compute the next Q-values using the target network
+                # Retrieve the target network q-values for the current-network-selected actions
                 next_q_values = self.q_net_target(replay_data.next_observations)
-                # Follow greedy policy: use the one with the highest value
-                next_q_values, _ = next_q_values.max(dim=1)
+                next_q_values = th.gather(next_q_values, dim=1, index=next_actions.unsqueeze(1))
+
+                #calculate q function variance over time
+                q_diffs_for_batch = th.abs(best_next_q_values_from_current.unsqueeze(1) - next_q_values)
+                avg_batch_q_diff = th.mean(q_diffs_for_batch).item()
+                q_diffs_for_all_batches.append(avg_batch_q_diff)
+
+                if avg_batch_q_diff > self.max_qdiffs:
+                    self.max_qdiffs = avg_batch_q_diff
+
+                shaping_reward_scaling = th.clip(q_diffs_for_batch/self.max_qdiffs,0,1)
+
+                # # #REGULAR DQN UPDATES
+                # # Compute the next Q-values using the target network
+                # next_q_values = self.q_net_target(replay_data.next_observations)
+                # # Follow greedy policy: use the one with the highest value
+                # next_q_values, _ = next_q_values.max(dim=1)
 
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
                 shaping_reward_scaling = self._current_progress_remaining
-                shaping_rewards = th.mul(shaping_reward_scaling, calc_shaping_rewards(replay_data.observations,replay_data.actions))
+                try:
+                    reward_scalings.append(th.mean(shaping_reward_scaling))
+                except TypeError:
+                    reward_scalings.append(shaping_reward_scaling)
+
+                shaping_rewards = th.mul(0, calc_shaping_rewards(replay_data.observations,replay_data.actions))
                 # shaping_rewards = th.zeros_like(replay_data.rewards)
 
                 target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
@@ -245,25 +261,26 @@ class DDQN(OffPolicyAlgorithm):
             th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
             self.policy.optimizer.step()
 
-            #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
-            #This feels... not ideal, and indiciative of a deeper problem...
-            #Compute RND loss
-            rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
-            rnd_losses.append(rnd_loss.item())
+            # #NOTE: for some reason moving this computation before optimizing the critic causes things to break.
+            # #This feels... not ideal, and indiciative of a deeper problem...
+            # #Compute RND loss
+            # rnd_loss = F.mse_loss(self.rnd_learner(replay_data.observations), target_rnd_vals)
+            # rnd_losses.append(rnd_loss.item())
 
-            #optimize the RND learner
-            self.rnd_learner.optimizer.zero_grad()
-            rnd_loss.backward()
-            self.rnd_learner.optimizer.step()
+            # #optimize the RND learner
+            # self.rnd_learner.optimizer.zero_grad()
+            # rnd_loss.backward()
+            # self.rnd_learner.optimizer.step()
 
         # Increase update counter
         self._n_updates += gradient_steps
         print(self._n_updates)
 
-        self.logger.record("train/max_avg_rnd_std", self.max_avg_rnd_loss)
-        self.logger.record("train/reward_scale", shaping_reward_scaling)
+        # self.logger.record("train/max_avg_rnd_std", self.max_avg_rnd_loss)
+        self.logger.record("train/reward_scale", np.mean(reward_scalings))
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
         self.logger.record("train/loss", np.mean(losses))
+        self.logger.record("train/qdiffs", np.mean(q_diffs_for_all_batches))
 
     def predict(
         self,
