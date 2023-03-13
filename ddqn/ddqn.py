@@ -233,7 +233,7 @@ class DDQN(OffPolicyAlgorithm):
                 # Avoid potential broadcast issue
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
-                shaping_reward_scaling = self._current_progress_remaining
+                # shaping_reward_scaling = self._current_progress_remaining
                 try:
                     reward_scalings.append(th.mean(shaping_reward_scaling))
                 except TypeError:
