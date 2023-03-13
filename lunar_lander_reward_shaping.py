@@ -29,10 +29,10 @@ def calc_shaping_rewards(state, action):
 	 - rewards: (batch_size)x(1) tensor with shaping rewards for each (s,a) pair in the batch.
 	"""
 	#Calculate angle target, clipped between +- 0.4
-	angle_targ = th.mul(state[:,0],0.5) + state[:,2]
-	angle_targ = th.clip(angle_targ, -0.4, 0.4)
+	angle_targ = th.mul(state[:,0],0.75) + state[:,2]
+	angle_targ = th.clip(angle_targ, -0.5, 0.5)
 
-	hover_targ = th.mul(th.abs(state[:,0]), 0.55)
+	hover_targ = th.mul(th.abs(state[:,0]), 0.8)
 
 	angle_todo = th.mul((angle_targ - state[:,4]),0.5) - state[:,5]
 	hover_todo = th.mul((hover_targ - state[:,1]),0.5) - th.mul(state[:,3],0.5)
@@ -45,7 +45,7 @@ def calc_shaping_rewards(state, action):
 	# heuristic_action = th.cat((th.sub(th.mul(hover_todo,20),1), th.mul(angle_todo,-20)))
 	# heuristic_action = th.clip(heuristic_action, -1, +1)
 
-	heuristic_action = th.zeros_like(hover_targ)
+	heuristic_action = -1*th.ones_like(hover_targ)
 	heuristic_action = th.where(th.logical_and(th.gt(hover_todo,th.abs(angle_todo)), th.gt(hover_todo, 0.05)), 2, 0)
 	heuristic_action = th.where(th.lt(angle_todo, -0.05), 3, 0)
 	heuristic_action = th.where(th.gt(angle_todo, 0.05), 1, 0)

@@ -239,7 +239,7 @@ class DDQN(OffPolicyAlgorithm):
                 except TypeError:
                     reward_scalings.append(shaping_reward_scaling)
 
-                shaping_rewards = th.mul(0, calc_shaping_rewards(replay_data.observations,replay_data.actions))
+                shaping_rewards = th.mul(1, calc_shaping_rewards(replay_data.observations,replay_data.actions))
                 # shaping_rewards = th.zeros_like(replay_data.rewards)
 
                 target_q_values = replay_data.rewards + shaping_rewards + (1 - replay_data.dones) * self.gamma * next_q_values
